@@ -1,0 +1,226 @@
+<!DOCTYPE html
+	PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ko" lang="ko">
+
+<head>
+	<title>Cross-Browser QRCode generator for Javascript</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+	<script type="text/javascript" src="jquery.min.js"></script>
+	<script type="text/javascript" src="qrcode.js"></script>
+	<script type="text/javascript" src="moment.js"></script>
+	<style>
+		th {
+			text-align: left;
+		}
+	</style>
+	<script>
+		function crc16(data, offset, length) {
+			if (data == null || offset < 0 || offset > data.length - 1 || offset + length > data.length) {
+				return 0;
+			}
+
+			crc = 0xFFFF;
+			for (i = 0; i < length; ++i) {
+				crc ^= data.charCodeAt(offset + i) << 8;
+				for (j = 0; j < 8; ++j) {
+					crc = (crc & 0x8000) > 0 ? (crc << 1) ^ 0x1021 : crc << 1;
+				}
+			}
+			return crc & 0xFFFF;
+		}
+
+		function FPScrc16(data) {
+			crc = 0xFFFF;
+			for (i = 0; i < data.length; ++i) {
+				crc ^= data.charCodeAt(0 + i) << 8;
+				for (j = 0; j < 8; ++j) {
+					crc = (crc & 0x8000) > 0 ? (crc << 1) ^ 0x1021 : crc << 1;
+				}
+			}
+			return crc & 0xFFFF;
+		}
+	</script>
+</head>
+
+<body>
+	<input type="hidden" id="error1">
+	<input type="hidden" id="error2">
+	<input type="hidden" id="error3">
+	<div id="NoPaymentMethodSelected" style="display: none; color:red"> No Payment Method Selected <br></div>
+	<div id="RequireAmount" style="display: none; color:red"> Amount is required if expire time is not empty <br></div>
+	<div id="ReceiverError" style="display: none; color:red"> One receiver is required <br></div>
+	<table>
+		<tbody>
+			<tr>
+				<th>Email</th>
+				<th><input type="radio" name="method" id="method" value="E" onchange="updateFields()"
+						onclick="updateFields()" checked=""></th>
+				<th><input type="text" name="email" id="email"></th>
+				<th></th>
+			</tr>
+			<tr>
+				<th>Mobile</th>
+				<th><input type="radio" name="method" id="method" value="M" onchange="updateFields()"
+						onclick="updateFields()"></th>
+				<th><input type="text" name="mobile" id="mobile" disabled="disabled"></th>
+				<th></th>
+			</tr>
+			<tr>
+				<th>FPS ID</th>
+				<th><input type="radio" name="method" id="method" value="F" onchange="updateFields()"
+						onclick="updateFields()"></th>
+				<th><input type="text" name="fpsId" id="fpsId" disabled="disabled"></th>
+				<th></th>
+			</tr>
+			<tr style="display: none;">
+				<th>HKID</th>
+				<th><input type="radio" name="method" id="method" value="H" onchange="updateFields()"
+						onclick="updateFields()"></th>
+				<th><input type="text" name="hkid" id="hkid" disabled="disabled"></th>
+				<th></th>
+			</tr>
+			<tr>
+				<th>Expire time</th>
+				<th></th>
+				<th><input type="datetime-local" step="1" name="expire" id="expire"></th>
+				<th><button onclick="$('input#expire').val('');updateQR();">Clear</button></th>
+			</tr>
+			<tr>
+				<th>Payment amount</th>
+				<th></th>
+				<th><input type="number" name="amount" id="amount"></th>
+				<th></th>
+			</tr>
+			<tr>
+				<th>QR Code content</th>
+				<th></th>
+				<th><textarea name="text" id="text" cols="30" rows="2" readonly="readonly"></textarea></th>
+				<th><button onclick="updateQR()">Update QR Code</button></th>
+			</tr>
+		</tbody>
+	</table>
+	<div id="qrcode" style="width:300px; height:300px; margin-top:15px;"></div>
+
+	<script type="text/javascript">
+		var qrcode = new QRCode(document.getElementById("qrcode"), {
+			width: 300,
+			height: 300
+		});
+
+		function makeCode() {
+			var qrcode = new QRCode(document.getElementById("qrcode"), {
+				width: 300,
+				height: 300
+			});
+
+			var elText = document.getElementById("text");
+
+			if (!elText.value) {
+				return;
+			}
+
+			qrcode.makeCode(elText.value);
+		}
+
+		makeCode();
+
+		function updateFields() {
+			$('#error1').val(0)
+			$('input#email').attr('disabled', 'disabled')
+			$('input#mobile').attr('disabled', 'disabled')
+			$('input#fpsId').attr('disabled', 'disabled')
+			$('input#hkid').attr('disabled', 'disabled')
+			$('#NoPaymentMethodSelected').hide()
+			switch ($('input#method:checked').val()) {
+				case 'E':
+					$('input#email').attr('disabled', null)
+					break;
+				case 'M':
+					$('input#mobile').attr('disabled', null)
+					break;
+				case 'F':
+					$('input#fpsId').attr('disabled', null)
+					break;
+				case 'H':
+					$('input#hkid').attr('disabled', null)
+					break;
+				default:
+					$('#NoPaymentMethodSelected').show()
+					$('#error1').val(1)
+			}
+			$('input[type=text]:disabled').val('')
+		}
+
+		function updateQR() {
+			var qrcodeFull = ''
+			var dynamicCodeHead = '00020101021226'
+			var staticCodeHead = '00020101021126'
+
+			var ReceiverBlk = '0012hk.com.hkicl'
+
+			if ($('input#fpsId').val() != '') {
+				ReceiverBlk += '02' + String($('input#fpsId').val().length).padStart(2, '0') + $('input#fpsId').val()
+			}
+			if ($('input#mobile').val() != '') {
+				ReceiverBlk += '03' + String($('input#mobile').val().length).padStart(2, '0') + $('input#mobile').val()
+			}
+			if ($('input#email').val() != '') {
+				ReceiverBlk += '04' + String($('input#email').val().length).padStart(2, '0') + $('input#email').val()
+			}
+			if ($('input#expire').val() != '') {
+				ReceiverBlk += '0512' + moment(Date.parse($('input#expire').val())).format('YYMMDDHHmmss')
+			}
+			if ($('input#hkid').val() != '') {
+				ReceiverBlk += '06' + String($('input#hkid').val().length).padStart(2, '0') + $('input#hkid').val()
+			}
+
+			if ((($('input#fpsId').val() != '' ? 1 : 0) +
+				($('input#mobile').val() != '' ? 1 : 0) +
+				($('input#email').val() != '' ? 1 : 0) +
+				($('input#hkid').val() != '' ? 1 : 0)) != 1) {
+				$('#ReceiverError').show()
+				$('#error3').val(1)
+			} else {
+				$('#ReceiverError').hide()
+				$('#error3').val(0)
+			}
+
+			if ($('input#expire').val() != '') {
+				if ($('#amount').val() != '') {
+					$('#RequireAmount').hide()
+					$('#error2').val(0)
+				} else {
+					$('#RequireAmount').show()
+					$('#error2').val(1)
+				}
+				qrcodeFull += dynamicCodeHead
+			} else {
+				qrcodeFull += staticCodeHead
+				$('#RequireAmount').hide()
+				$('#error2').val(0)
+			}
+
+			qrcodeFull += String(ReceiverBlk.length).padStart(2, '0') + ReceiverBlk + '520400005303344'
+
+			if ($('#amount').val() != '') {
+				qrcodeFull += '54' + String($('#amount').val().length).padStart(2, '0') + $('#amount').val()
+			}
+
+			qrcodeFull += '5802HK5902NA6002HK6304'
+			qrcodeFull += (FPScrc16(qrcodeFull)).toString(16).toUpperCase()
+
+			if (($('#error1').val() + $('#error2').val() + $('#error3').val()) == 0) {
+				$("#text").val(qrcodeFull)
+			} else {
+				$("#text").val('')
+			}
+			$('#qrcode').empty()
+			makeCode();
+		}
+
+		$("input").on("change", function () {
+			updateQR();
+		});
+	</script>
+</body>
